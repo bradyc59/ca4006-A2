@@ -1,0 +1,4 @@
+,Unnamed: 0.2,Unnamed: 0.1,Unnamed: 0,acronym,title,description,researchers,funding_amount,approved,funding_agency
+0,0.0,0.0,,Test 12,W,Win,Conor,400000,True,Irish Research Council
+1,1.0,,,Test 12,fea,afwe,conorbrady778@gmail.com,400000,True,Irish Research Council
+2,,,,Test 12,fea,afwe,,400000,False,Irish Research Council

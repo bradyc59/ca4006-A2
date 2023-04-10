@@ -1,0 +1,45 @@
+<form id="proposal-form" action="/submit_proposal" method="POST">
+    <label for="acronym">Acronym:</label>
+    <input type="text" id="acronym" name="acronym" required><br><br>
+    <label for="title">Title:</label>
+    <input type="text" id="title" name="title" required><br><br>
+    <label for="description">Description:</label>
+    <textarea id="description" name="description" required></textarea><br><br>
+    <label for="researchers">Researchers:</label>
+    {{user}}<br><br>
+    <label for="funding_agency">funding_agency:</label>
+         <select name="funding_agency" id="funding_agency">
+            <option value="Irish Research Council">Irish Research Council</option>
+            <option value="Science Foundation Ireland">Science Foundation Ireland</option>
+            <option value="European Council">European Council</option>
+         </select>
+         <br><br>
+    <label for="funding_amount">Funding Amount:</label>
+    <input type="number" id="funding_amount" name="funding_amount" required><br><br>
+    <input type="submit" value="Submit Proposal">
+</form>
+<script>
+    const form = document.getElementById("proposal-form");
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const formData = {
+            "acronym": form.acronym.value,
+            "title": form.title.value,
+            "description": form.description.value,
+            "researchers": "",
+            "funding_agency": form.funding_agency.value,
+            "funding_amount": form.funding_amount.value,
+            "approved": false
+        };
+        const response = await fetch("/submit_proposal", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(formData)
+        });
+        const result = await response.json();
+        console.log(result);
+        console.log(result.headers["X-Process-Time"])
+    });
+</script>

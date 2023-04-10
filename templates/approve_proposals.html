@@ -1,0 +1,16 @@
+<body>
+    {% for key, value in proposals.items()%}
+    <h1>{{ value.acronym }}</h1>
+    <p><strong>Title:</strong> {{ value.title}}</p>
+    <p><strong>Description:</strong> {{ value.description }}</p>
+    <p><strong>Researchers:</strong> {{ value.researchers }}</p>
+    <p><strong>Funding Amount:</strong> {{ value.funding_amount }}</p>
+    <p><strong>Approved:</strong> {{ value.approved }}</p>
+    <p><strong>Funding Agency:</strong> {{ value.funding_agency }}</p>
+
+
+    {%endfor%}
+    <form action="/approve_proposal" method="POST">
+        <button type="submit">Approve Proposals</button>
+      </form>
+  </body>

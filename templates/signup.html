@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Signup</title>
+	<!-- Bootstrap CSS -->
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+</head>
+<body>
+	<div class="container mt-5">
+		<h1>Signup</h1>
+		<form id="signup-form" method="POST" action="/signup-confirm">
+			<!-- Name -->
+			<div class="form-group">
+				<label for="name">Name</label>
+				<input type="text" class="form-control" id="name" name="name" placeholder="Enter name" required>
+			</div>
+			<!-- Email -->
+			<div class="form-group">
+				<label for="email">Email address</label>
+				<input type="email" class="form-control" id="email" name="email" placeholder="Enter email" required>
+			</div>
+			<!-- Password -->
+			<div class="form-group">
+				<label for="password">Password</label>
+				<input type="password" class="form-control" id="password" name="password" placeholder="Password" required>
+			</div>
+			<!-- Confirm Password -->
+			<div class="form-group">
+				<label for="confirm_password">Confirm Password</label>
+				<input type="password" class="form-control" id="confirm_password" name="confirm_password" placeholder="Confirm Password" required>
+			</div>
+			<button type="submit" class="btn btn-primary">Signup</button>
+		</form>
+	</div>
+	<!-- Bootstrap JS -->
+	<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+	<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+</body>
+</html>
+<script>
+    const form = document.getElementById("signup-form");
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const formData = {
+            "id": 0,
+            "name": form.name.value,
+            "email": form.email.value,
+            "password": form.password.value,
+            "confirm_password": form.confirm_password.value
+        };
+        const response = await fetch("/signup-confirm", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(formData)
+        });
+        const result = await response.json();
+        console.log(result);
+		console.log(result.headers)
+    });
+</script>
