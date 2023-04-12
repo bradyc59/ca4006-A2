@@ -1,5 +1,4 @@
 from typing import List
-from datetime import date
 from pydantic import BaseModel, BaseSettings
 import logging
 from fastapi import FastAPI, Request
@@ -7,6 +6,7 @@ import fastapi
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import pandas
+from datetime import date, timedelta
 import os
 
 cur_path = os.path.dirname(__file__)
@@ -21,7 +21,6 @@ templates = Jinja2Templates(directory="templates/")
 logger = logging.getLogger(__name__)
 
 logged_in_user = {}
-approved=False
 
 
 funding_agencies =  {'Irish Research Council': 1000000, 'Science Foundation Ireland': 1000000, 'European Council': 1000000}
@@ -32,6 +31,8 @@ for i, p in props.iterrows():
     if p['approved'] == True:
         current = p['funding_agency']
         funding_agencies[current] = funding_agencies[current] - p['funding_amount']
+
+researcher_form = False
   
 class ResearchProposal(BaseModel):
     acronym: str
@@ -64,6 +65,9 @@ async def root(request: Request, response_class=HTMLResponse):
 # Research proposal endpoint
 @app.post("/submit_proposal")
 def submit_proposal(data: dict):
+    today = date.today()
+    data['end_date'] = today + timedelta(days=3*30)
+    data['remaining_budget'] = data['funding_amount']
     data['researchers'] = settings.user
     if data['funding_agency'] == 'Irish Research Council':
         props = pandas.read_csv(cur_path + '/csv_files/Irish_research_council.csv')
@@ -72,7 +76,6 @@ def submit_proposal(data: dict):
             if funding_agencies[current_agency] - int(data['funding_amount']) >= 0:
                 funding_agencies[current_agency] = funding_agencies[current_agency] - int(data['funding_amount'])
                 data['approved'] = True
-                approved=True
 
         props = props.append(data, ignore_index = True)
         props.to_csv(cur_path + '/csv_files/Irish_research_council.csv')
@@ -83,7 +86,6 @@ def submit_proposal(data: dict):
             if funding_agencies[current_agency] - int(data['funding_amount']) >= 0:
                 funding_agencies[current_agency] = funding_agencies[current_agency] - int(data['funding_amount'])
                 data['approved'] = True
-                approved=True
 
         props = props.append(data, ignore_index = True)
         props.to_csv(cur_path + '/csv_files/science_foundation_ireland.csv')
@@ -94,34 +96,54 @@ def submit_proposal(data: dict):
             if funding_agencies[current_agency] - int(data['funding_amount']) >= 0:
                 funding_agencies[current_agency] = funding_agencies[current_agency] - int(data['funding_amount'])
                 data['approved'] = True
-                approved=True
 
         props = props.append(data, ignore_index = True)
         props.to_csv(cur_path + '/csv_files/european_council.csv')
     if data['approved'] == True:
         proposals = pandas.read_csv(cur_path + '/csv_files/proposals.csv')
+        all_props = pandas.read_csv(cur_path + '/csv_files/list_all_proposals.csv')
         proposals = proposals.append(data, ignore_index = True)
+        all_props = all_props.append(data, ignore_index = True)
         proposals.to_csv(cur_path + '/csv_files/proposals.csv')
-    return RedirectResponse(url="/success", status_code=303)
+        all_props.to_csv(cur_path + '/csv_files/list_all_proposals.csv')
+        return JSONResponse(content={"message": "Your proposal was approved!"})
+    else:
+        all_props = pandas.read_csv(cur_path + '/csv_files/list_all_proposals.csv')
+        data['end_date'] = 'N/A'
+        data['remaining_budget'] = 'N/A'
+        all_props = all_props.append(data, ignore_index = True)
+        all_props.to_csv(cur_path + '/csv_files/list_all_proposals.csv.csv')
+        return JSONResponse(content={"message": "Your proposal was rejected, the funding amount must be between 200K and 500k, if it was the funding agency cannot afford the amount you are asking for."})
 
 @app.get('/view_proposal')
 async def view_proposals(request: Request):
     props = pandas.read_csv(cur_path + '/csv_files/proposals.csv')
+    all_props = pandas.read_csv(cur_path + '/csv_files/list_all_proposals.csv')
+    users = pandas.read_csv(cur_path + '/csv_files/users.csv')
+
+    print(all_props)
     proposals = {}
+    for i, value in users.iterrows():
+        if users.loc[i, 'email'] == settings.user:
+            logged_in_user = users.loc[i] 
+    for i, value in all_props.iterrows():
+        for user in all_props['researchers'].str.cat(sep=','):
+            print(user)
+            if settings.user == user:
+                proposals[i] = value.to_dict()
     for i, value in props.iterrows():
-        print(props)
-        if props.loc[i, 'researchers'] == settings.user:
-            # proposals.append(props.loc[i])
+        print(logged_in_user)
+        if logged_in_user['usertype'] == 'University':
             proposals[i] = value.to_dict()
     print(proposals)
     return templates.TemplateResponse('approve_proposals.html', {'request': request, 'proposals': proposals})
 
-@app.get("/success")
-async def success(request: Request, approved: bool):
-    # Render the success page
-        return JSONResponse(content={"message": "Your proposal was approved!"})
-    # else:
-    #     return JSONResponse(content={"message": "Your proposal was rejected, the funding amount must be between 200K and 500k, if it was the funding agency cannot afford the amount you are asking for."})
+# @app.get("/success")
+# async def success(request: Request, approved: bool):
+#     # Render the success page
+#         return JSONResponse(content={"message": "Your proposal was approved!"})
+#     # else:
+#     #     return JSONResponse(content={"message": "Your proposal was rejected, the funding amount must be between 200K and 500k, if it was the funding agency cannot afford the amount you are asking for."})
 
 @app.get('/signup')
 def signup(request: Request):
@@ -151,6 +173,8 @@ def login_check(user_data: dict):
     emails = users['email'].tolist()
     passwords = users['password'].tolist()
     names = users['name'].tolist()
+    usertype = users['usertype'].tolist()
+    organization = users['organization'].tolist()
 
     i= 0
     print(user_data['email'])
@@ -160,7 +184,9 @@ def login_check(user_data: dict):
                 'id': ids[i],
                 'name': names[i],
                 'email': emails[i],
-                'password': passwords[i]
+                'password': passwords[i],
+                'usertype': usertype[i],
+                'organization': organization[i],
             }
             settings.user = logged_in_user["email"]
             print(settings.user)
@@ -169,10 +195,27 @@ def login_check(user_data: dict):
         i += 1
     return {"message": "User does not exist"}
 
+
 # Research account management endpoints
-@app.post("/create_account")
-def create_account(account: ResearchAccount):
+@app.post("/add-reseacrher")
+def create_account(researcher: dict):
     # TODO: Create a new research account
+    print(researcher)
+    list_researchers = []
+    users = pandas.read_csv(cur_path + '/csv_files/users.csv')
+    props = pandas.read_csv(cur_path + '/csv_files/proposals.csv')
+    for i, value in users.iterrows():
+        if users.loc[i, 'email'] == researcher['email']:
+            for j, value in props.iterrows():
+                print(props.loc[j, 'id'])
+                print(researcher['id'])
+                if int(props.loc[j, 'id']) == int(researcher['id']):
+                    list_researchers.append(props.loc[j, 'researchers'])
+                    list_researchers.append(researcher['email'])
+                    print(list_researchers)
+                    props.at[j, 'researchers'] = list_researchers
+                    print(props.loc[j, 'researchers'])
+    props.to_csv(cur_path + '/csv_files/proposals.csv')
     return {"message": "Account created successfully"}
 
 @app.get("/account/{account_id}")

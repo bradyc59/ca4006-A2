@@ -1,16 +1,47 @@
 <body>
-    {% for key, value in proposals.items()%}
-    <h1>{{ value.acronym }}</h1>
-    <p><strong>Title:</strong> {{ value.title}}</p>
-    <p><strong>Description:</strong> {{ value.description }}</p>
-    <p><strong>Researchers:</strong> {{ value.researchers }}</p>
-    <p><strong>Funding Amount:</strong> {{ value.funding_amount }}</p>
-    <p><strong>Approved:</strong> {{ value.approved }}</p>
-    <p><strong>Funding Agency:</strong> {{ value.funding_agency }}</p>
+  {% for key, value in proposals.items()%}
+  <h1 data-proposal-id="{{ value.id }}">{{ value.acronym }}</h1>
+  <p><strong>Title:</strong> {{ value.title}}</p>
+  <p><strong>Description:</strong> {{ value.description }}</p>
+  <p><strong>Researchers:</strong> {{ value.researchers }}</p>
+  <br>
 
+    <form id="researcher-form" data-proposal-id="{{ value.id }}">
+      <label for="new_researcher">Add Researcher:</label>
+      <input id="new_researcher" name="new_researcher" required></input><br><br>
+      <input type="submit" value="Add Researcher">
+    </form>
 
-    {%endfor%}
-    <form action="/approve_proposal" method="POST">
-        <button type="submit">Approve Proposals</button>
-      </form>
-  </body>
+  <p><strong>Funding Amount:</strong> {{ value.funding_amount }}</p>
+  <p><strong>Remaining Budget:</strong> {{ value.remaining_budget }}</p>
+  <p><strong>End Date:</strong> {{ value.end_date }}</p>
+  {% if value.approved == True%}
+  <p><strong>Approved:</strong> YES </p>
+  {% endif %}
+  {% if value.approved == False%}
+  <p><strong>Approved:</strong> NO </p>
+  {% endif %}
+  <p><strong>Funding Agency:</strong> {{ value.funding_agency }}</p>
+  {%endfor%}
+</body>
+<script>
+const form = document.getElementById("researcher-form");
+const proposalId = form.getAttribute("data-proposal-id");
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const data = {
+            "id": proposalId,
+            "email": form.new_researcher.value
+        };
+        const response = await fetch("/add-reseacrher", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        console.log(result);
+        console.log(result.headers["X-Process-Time"])
+    });
+</script>
