@@ -1,5 +1,5 @@
 from typing import List
-from pydantic import BaseModel, BaseSettings
+from pydantic import BaseModel, BaseSettings, Field
 import logging
 from fastapi import FastAPI, Request
 import fastapi
@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import pandas
 from datetime import date, timedelta
 import os
+from uuid import UUID, uuid4
 
 cur_path = os.path.dirname(__file__)
 
@@ -20,7 +21,7 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates/")
 logger = logging.getLogger(__name__)
 
-logged_in_user = {}
+logged_in_user = { 'email': settings.user }
 
 
 funding_agencies =  {'Irish Research Council': 1000000, 'Science Foundation Ireland': 1000000, 'European Council': 1000000}
@@ -33,15 +34,27 @@ for i, p in props.iterrows():
         funding_agencies[current] = funding_agencies[current] - p['funding_amount']
 
 researcher_form = False
+today = date.today()
   
 class ResearchProposal(BaseModel):
     acronym: str
     title: str
     description: str
-    researchers: str
     funding_agency: str
-    funding_amount: float
+    funding_amount: int
     approved: bool
+    remaining_budget: int
+    end_date: str = today + timedelta(days=3*30)
+
+class NewResearcher(BaseModel):
+    title: str
+    email: str
+
+class SignUp(BaseModel):
+    email: str
+    password: str
+    usertype: str
+    organization: str = "None"
 
 class ResearchAccount(BaseModel):
     id: int
@@ -55,178 +68,220 @@ class Transaction(BaseModel):
     amount: int
     account_id: int
 
+class Login(BaseModel):
+    email: str
+    password: str
+
 @app.get("/proposal")
-async def root(request: Request, response_class=HTMLResponse):
-    print(logged_in_user)
-    print(settings.user)
+async def root():
     print(settings)
-    return templates.TemplateResponse('proposal.html', {'request': request, 'user': settings.user})
+    return {"message": "user already assigned to another project"}
 
 # Research proposal endpoint
 @app.post("/submit_proposal")
-def submit_proposal(data: dict):
-    today = date.today()
-    data['end_date'] = today + timedelta(days=3*30)
-    data['remaining_budget'] = data['funding_amount']
-    data['researchers'] = settings.user
-    if data['funding_agency'] == 'Irish Research Council':
+def submit_proposal(data: ResearchProposal):
+    user_pro = {
+        'email': "",
+        'title': ""
+    }
+    diction = {
+            'acronym': data.acronym,
+            'title': data.title,
+            'description': data.description,
+            'funding_amount': data.funding_amount,
+            'approved': data.approved,
+            'funding_agency': data.funding_agency,
+            'end_date': data.end_date,
+            'remaining_budget': data.remaining_budget
+        }
+    print(data)
+    if data.funding_agency == 'Irish Research Council':
         props = pandas.read_csv(cur_path + '/csv_files/Irish_research_council.csv')
-        current_agency = data['funding_agency']
-        if int(data['funding_amount']) >= 200000 and int(data['funding_amount']) <= 500000:
-            if funding_agencies[current_agency] - int(data['funding_amount']) >= 0:
-                funding_agencies[current_agency] = funding_agencies[current_agency] - int(data['funding_amount'])
-                data['approved'] = True
-
-        props = props.append(data, ignore_index = True)
+        current_agency = data.funding_agency
+        if int(data.funding_amount) >= 200000 and int(data.funding_amount) <= 500000:
+            if funding_agencies[current_agency] - int(data.funding_amount) >= 0:
+                funding_agencies[current_agency] = funding_agencies[current_agency] - int(data.funding_amount)
+                diction['approved'] = True
+        
+        props = props.append(diction, ignore_index = True)
         props.to_csv(cur_path + '/csv_files/Irish_research_council.csv')
-    if data['funding_agency'] == 'Science Foundation Ireland':
+    if data.funding_agency == 'Science Foundation Ireland':
         props = pandas.read_csv(cur_path + '/csv_files/science_foundation_ireland.csv')
-        current_agency = data['funding_agency']
-        if int(data['funding_amount']) >= 200000 and int(data['funding_amount']) <= 500000:
-            if funding_agencies[current_agency] - int(data['funding_amount']) >= 0:
-                funding_agencies[current_agency] = funding_agencies[current_agency] - int(data['funding_amount'])
-                data['approved'] = True
+        current_agency = data.funding_agency
+        if int(data.funding_amount) >= 200000 and int(data.funding_amount) <= 500000:
+            if funding_agencies[current_agency] - int(data.funding_amount) >= 0:
+                funding_agencies[current_agency] = funding_agencies[current_agency] - int(data.funding_amount)
+                diction['approved'] = True
 
-        props = props.append(data, ignore_index = True)
+        props = props.append(diction, ignore_index = True)
         props.to_csv(cur_path + '/csv_files/science_foundation_ireland.csv')
-    if data['funding_agency'] == 'European Council':
+    if data.funding_agency == 'European Council':
         props = pandas.read_csv(cur_path + '/csv_files/european_council.csv')
-        current_agency = data['funding_agency']
-        if int(data['funding_amount']) >= 200000 and int(data['funding_amount']) <= 500000:
-            if funding_agencies[current_agency] - int(data['funding_amount']) >= 0:
-                funding_agencies[current_agency] = funding_agencies[current_agency] - int(data['funding_amount'])
-                data['approved'] = True
+        current_agency = data.funding_agency
+        if int(data.funding_amount) >= 200000 and int(data.funding_amount) <= 500000:
+            if funding_agencies[current_agency] - int(data.funding_amount) >= 0:
+                funding_agencies[current_agency] = funding_agencies[current_agency] - int(data.funding_amount)
+                diction['approved'] = True
 
-        props = props.append(data, ignore_index = True)
+        props = props.append(diction, ignore_index = True)
         props.to_csv(cur_path + '/csv_files/european_council.csv')
-    if data['approved'] == True:
+    if diction['approved'] == True:
         proposals = pandas.read_csv(cur_path + '/csv_files/proposals.csv')
         all_props = pandas.read_csv(cur_path + '/csv_files/list_all_proposals.csv')
-        proposals = proposals.append(data, ignore_index = True)
-        all_props = all_props.append(data, ignore_index = True)
+        list_users = pandas.read_csv(cur_path + '/csv_files/user_project.csv')
+        for i, value in list_users.iterrows():
+            print("user: ", settings.user)
+            print("list: ", list_users['email'].to_list())
+            if settings.user not in list_users['email'].to_list():
+                print(123)
+                user_pro['title'] = data.title
+                user_pro['email'] = settings.user
+            else:
+                return {"message": "user already assigned to another project"}
+        proposals = proposals.append(diction, ignore_index = True)
+        all_props = all_props.append(diction, ignore_index = True)
+        print(user_pro)
+        list_users = list_users.append(user_pro, ignore_index = True)
+        list_users.to_csv(cur_path + '/csv_files/user_project.csv')
         proposals.to_csv(cur_path + '/csv_files/proposals.csv')
         all_props.to_csv(cur_path + '/csv_files/list_all_proposals.csv')
-        return JSONResponse(content={"message": "Your proposal was approved!"})
+        return {"message": "Your proposal was approved!"}
     else:
         all_props = pandas.read_csv(cur_path + '/csv_files/list_all_proposals.csv')
-        data['end_date'] = 'N/A'
-        data['remaining_budget'] = 'N/A'
-        all_props = all_props.append(data, ignore_index = True)
+        data.end_date = 'N/A'
+        data.remaining_budget = 'N/A'
+        all_props = all_props.append(diction, ignore_index = True)
         all_props.to_csv(cur_path + '/csv_files/list_all_proposals.csv.csv')
-        return JSONResponse(content={"message": "Your proposal was rejected, the funding amount must be between 200K and 500k, if it was the funding agency cannot afford the amount you are asking for."})
+        return {"message": "Your proposal was rejected, the funding amount must be between 200K and 500k, if it was the funding agency cannot afford the amount you are asking for."}
 
 @app.get('/view_proposal')
-async def view_proposals(request: Request):
+async def view_proposals():
     props = pandas.read_csv(cur_path + '/csv_files/proposals.csv')
     all_props = pandas.read_csv(cur_path + '/csv_files/list_all_proposals.csv')
     users = pandas.read_csv(cur_path + '/csv_files/users.csv')
+    list_user = pandas.read_csv(cur_path + '/csv_files/user_project.csv')
 
     print(all_props)
-    proposals = {}
+    proposals = []
+    list_researcher = []
     for i, value in users.iterrows():
         if users.loc[i, 'email'] == settings.user:
             logged_in_user = users.loc[i] 
-    for i, value in all_props.iterrows():
-        for user in all_props['researchers'].str.cat(sep=','):
-            print(user)
-            if settings.user == user:
-                proposals[i] = value.to_dict()
     for i, value in props.iterrows():
         print(logged_in_user)
         if logged_in_user['usertype'] == 'University':
-            proposals[i] = value.to_dict()
-    print(proposals)
-    return templates.TemplateResponse('approve_proposals.html', {'request': request, 'proposals': proposals})
+            proposals.append(value.to_dict())
+            return {"proposals": proposals}
 
-# @app.get("/success")
-# async def success(request: Request, approved: bool):
-#     # Render the success page
-#         return JSONResponse(content={"message": "Your proposal was approved!"})
-#     # else:
-#     #     return JSONResponse(content={"message": "Your proposal was rejected, the funding amount must be between 200K and 500k, if it was the funding agency cannot afford the amount you are asking for."})
+    for i, value in all_props.iterrows():
+        for j, user in list_user.iterrows():
+            if list_user.loc[j, 'title'] == all_props.loc[i, 'title']:
+                print("Hello")
+                list_researcher.append(list_user.loc[j, 'email'])
+            
+        proposal_dict = all_props.loc[i].to_dict()
+        proposal_dict['researchers'] = list_researcher
+        proposals.append(proposal_dict)
+    if len(proposals) != 0:
+        return {"proposals": proposals}
+
+
+    print(proposals)
+    return {"message": "user already assigned to another project"}
 
 @app.get('/signup')
 def signup(request: Request):
-    return templates.TemplateResponse('signup.html', context={'request': request})
+    return {"message": "user already assigned to another project"}
 
 @app.post('/signup-confirm')
-def signup_confirm(user_details: dict, request: Request):
+def signup_confirm(user_details: SignUp):
     users = pandas.read_csv(cur_path + '/csv_files/users.csv')
     emails = users['email'].tolist()
-    if user_details['email'] in emails:
+    if user_details.email in emails:
         return {"message": "User already exists"}
-
+    user_details = {
+        'email': user_details.email,
+        'password': user_details.password,
+        'usertype': user_details.usertype,
+        'organization': user_details.organization,
+    }
     user = pandas.DataFrame([user_details])
-    user['id'] = users.shape[0] + 1
     new_users = users.append(user, ignore_index=True)
     new_users.to_csv(cur_path + '/csv_files/users.csv')
-    return login_check(user_details)
+    return {"message": f"Succesfully created user {user_details['email']}"}
 
 @app.get('/')
-async def login(request: Request):
-    return templates.TemplateResponse('login.html', context={'request': request})
+async def login():
+    return {"message": settings.user}
 
 @app.post('/login-check')
-def login_check(user_data: dict):
+def login_check(user_data: Login):
     users = pandas.read_csv(cur_path + '/csv_files/users.csv')
-    ids = users['id'].tolist()
     emails = users['email'].tolist()
     passwords = users['password'].tolist()
-    names = users['name'].tolist()
     usertype = users['usertype'].tolist()
     organization = users['organization'].tolist()
 
     i= 0
-    print(user_data['email'])
+    print(user_data.email)
+    print(emails)
     while i < len(emails):
-        if user_data['email'] == emails[i] and user_data['password'] == passwords[i]:
+        print(emails[i], passwords[i])
+        if user_data.email == emails[i] and user_data.password == passwords[i]:
             logged_in_user = {
-                'id': ids[i],
-                'name': names[i],
                 'email': emails[i],
                 'password': passwords[i],
                 'usertype': usertype[i],
                 'organization': organization[i],
             }
-            settings.user = logged_in_user["email"]
+            settings.user = logged_in_user['email']
             print(settings.user)
             print(settings)
-            return {'message': 'Successfully '}
+            return {'message': f'Successfully logged in as {settings.user}'}
         i += 1
     return {"message": "User does not exist"}
 
 
 # Research account management endpoints
 @app.post("/add-reseacrher")
-def create_account(researcher: dict):
+def create_account(researcher: NewResearcher):
     # TODO: Create a new research account
     print(researcher)
     list_researchers = []
     users = pandas.read_csv(cur_path + '/csv_files/users.csv')
+    list_users = pandas.read_csv(cur_path + '/csv_files/user_project.csv')
+    user = {}
     props = pandas.read_csv(cur_path + '/csv_files/proposals.csv')
     for i, value in users.iterrows():
-        if users.loc[i, 'email'] == researcher['email']:
+        if users.loc[i, 'email'] == researcher.email:
             for j, value in props.iterrows():
-                print(props.loc[j, 'id'])
-                print(researcher['id'])
-                if int(props.loc[j, 'id']) == int(researcher['id']):
-                    list_researchers.append(props.loc[j, 'researchers'])
-                    list_researchers.append(researcher['email'])
-                    print(list_researchers)
-                    props.at[j, 'researchers'] = list_researchers
-                    print(props.loc[j, 'researchers'])
+                if props.loc[j, 'title'] == researcher.title:
+                    user['title'] = researcher.title
+                    user['email'] = researcher.email
+                    user = pandas.DataFrame([user])
+                    list_users = list_users.append(user, ignore_index=True)
+                    print(list_users)
+                    list_users.to_csv(cur_path + '/csv_files/user_project.csv')
     props.to_csv(cur_path + '/csv_files/proposals.csv')
     return {"message": "Account created successfully"}
 
-@app.get("/account/{account_id}")
-def get_account(account_id: str):
-    # TODO: Get details of a research account
-    return {"message": f"Details of account {account_id}"}
+@app.post("/delete-from-project")
+def delete_from_project(account: NewResearcher):
+    users = pandas.read_csv(cur_path + '/csv_files/users.csv')
+    list_user = pandas.read_csv(cur_path + '/csv_files/user_project.csv')
 
-@app.put("/account/{account_id}")
-def update_account(account_id: str, researchers: List[str]):
-    # TODO: Update researchers associated with a research account
-    return {"message": f"Researchers for account {account_id} updated successfully"}
+    for i, value in users.iterrows():
+        if users.loc[i, 'email'] == settings.user:
+            logged_in_user = users.loc[i] 
+
+    for j, user in list_user.iterrows():
+        if list_user.loc[j, 'email'] == account.email and list_user.loc[j, 'title'] == account.title:
+            print("Hello")
+            list_user = list_user.drop(index=i)
+            list_user.to_csv(cur_path + '/csv_files/user_project.csv')
+            return {"message": f"Deleted  from project "}
+        
+    return {"message": f"User  not a part of "}
 
 # Transaction management endpoints
 @app.post("/create_transaction")

@@ -1,4 +1,3 @@
-,Unnamed: 0.1,Unnamed: 0,name,email,password,confirm_password,id, organization,usertype,organization
-0,0.0,0.0,DCU Admin,dcu.admin34@mail.dcu.ie,Admin,Admin,1,,University,None
-1,1.0,,Conor Brady,conor.brady59@gmail.com,Test,Test,2,,Researcher,None
-2,,,Conor,conorbrady@gmail.com,test,test,3,,Researcher,None
+,Unnamed: 0,email,password,usertype,organization
+0,0.0,test@gmail.com,123,Researcher,None
+1,,conor@gmail.com,Test,Researcher,None
