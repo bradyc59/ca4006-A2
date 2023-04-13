@@ -43,9 +43,8 @@ class ResearchProposal(BaseModel):
     acronym: str
     title: str
     description: str
-    funding_agency: str
     funding_amount: int
-    approved: bool
+    approved: bool = False
     remaining_budget: int
     end_date: str = today + timedelta(days=3*30)
 
@@ -76,20 +75,47 @@ class Login(BaseModel):
 
 @app.post("/submit-proposal")
 async def submit_proposal(data: ResearchProposal):
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, agency.approve_proposal, data, settings.user)
+    # data = {
+    #     'acronym': data.acronym,
+    #     'title': data.title,
+    #     'description': data.description,
+    #     'funding_amount': data.funding_amount,
+    #     'approved': data.approved,
+    #     'end_date': data.end_date,
+    #     'remaining_budget': data.remaining_budget
+    # }
+    print(data)
+    # loop = asyncio.get_event_loop()
+    result = await agency.approve_proposal(data, settings.user)
     return result
-
-from concurrent.futures import ThreadPoolExecutor
 
 @app.get('/view_proposal')
 async def view_proposals():
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(load_data)
-        proposals = await future
+    props = pandas.read_csv(cur_path + '/csv_files/list_all_proposals.csv')
+    props = props.loc[:, ~props.columns.str.contains('^Unnamed')]
+    list_users = pandas.read_csv(cur_path + '/csv_files/user_project.csv')
+    list_users = list_users.loc[:, ~list_users.columns.str.contains('^Unnamed')]
+    user = settings.user
+    proposals = props.to_dict('records')
     if len(proposals) != 0:
+        # Merge the two dataframes based on the common column "title"
+        merged_df = pandas.merge(props, list_users, on='title')
+
+        # Group the merged dataframe by "title" and create a dictionary
+        grouped_df = merged_df.groupby('title')
+        proposal_dict = {}
+        for title, group in grouped_df:
+            proposal_dict[title] = group['email'].tolist()
+
+        # Add the user list to each proposal dictionary
+        for proposal in proposals:
+            title = proposal.get('title', '')
+            proposal['users'] = proposal_dict.get(title, [])
+
         return {"proposals": proposals}
+
     return {"message": f"No proposals assigned to user {settings.user}"}
+
 
 def load_data():
     props = pandas.read_csv(cur_path + '/csv_files/proposals.csv')
@@ -122,31 +148,21 @@ def signup(request: Request):
 import concurrent.futures
 
 @app.post('/signup-confirm')
-async def signup_confirm(user_details: SignUp):
+def signup_confirm(user_details: SignUp):
     users = pandas.read_csv(cur_path + '/csv_files/users.csv')
     emails = users['email'].tolist()
     if user_details.email in emails:
         return {"message": "User already exists"}
-
-    # Define a function to write the new user details to file
-    def write_user_details(user_details):
-        user_details = {
-            'email': user_details.email,
-            'password': user_details.password,
-            'usertype': user_details.usertype,
-            'organization': user_details.organization,
-        }
-        user = pandas.DataFrame([user_details])
-        new_users = users.append(user, ignore_index=True)
-        new_users.to_csv(cur_path + '/csv_files/users.csv')
-
-    # Execute the write operation asynchronously using threads
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        future = executor.submit(write_user_details, user_details)
-        await future
-
+    user_details = {
+        'email': user_details.email,
+        'password': user_details.password,
+        'usertype': user_details.usertype,
+        'organization': user_details.organization,
+    }
+    user = pandas.DataFrame([user_details])
+    new_users = users.append(user, ignore_index=True)
+    new_users.to_csv(cur_path + '/csv_files/users.csv')
     return {"message": f"Succesfully created user {user_details['email']}"}
-
 
 @app.get('/')
 async def login():
@@ -174,7 +190,7 @@ async def login_check(user_data: Login):
 
 
 async def check_user(email, password, usertype, organization, input_email, input_password):
-    if email == input_email and password == input_password:
+    if email == input_email and str(password) == str(input_password):
         return {
             'email': email,
             'password': password,
@@ -194,22 +210,24 @@ async def create_account(researcher: NewResearcher):
     props = await asyncio.to_thread(pandas.read_csv, cur_path + '/csv_files/proposals.csv')
     for i, value in users.iterrows():
         if users.loc[i, 'email'] == researcher.email:
-            for j, value in props.iterrows():
-                if props.loc[j, 'title'] == researcher.title:
-                    user['title'] = researcher.title
-                    user['email'] = researcher.email
-                    user = pandas.DataFrame([user])
-                    list_users = list_users.append(user, ignore_index=True)
-                    await asyncio.to_thread(list_users.to_csv, cur_path + '/csv_files/user_project.csv')
-                    await asyncio.to_thread(props.to_csv, cur_path + '/csv_files/proposals.csv')
-                    return {"message": f"Successfully added {researcher.email} to project {researcher.title}"}
+            for k, value in list_users.iterrows():
+                if list_users.loc[k, 'lead'] == True:
+                    for j, value in props.iterrows():
+                        if props.loc[j, 'title'] == researcher.title:
+                            user['title'] = researcher.title
+                            user['email'] = researcher.email
+                            user = pandas.DataFrame([user])
+                            list_users = list_users.append(user, ignore_index=True)
+                            await asyncio.to_thread(list_users.to_csv, cur_path + '/csv_files/user_project.csv')
+                            await asyncio.to_thread(props.to_csv, cur_path + '/csv_files/proposals.csv')
+                            return {"message": f"Successfully added {researcher.email} to project {researcher.title}"}
     return {"message": f"Could not add {researcher.email} to project {researcher.title}"}
 
 
 @app.post("/delete-from-project")
 async def delete_from_project(account: NewResearcher):
     users = await asyncio.to_thread(pandas.read_csv, cur_path + '/csv_files/users.csv')
-    list_users = await asyncio.to_thread(pandas.read_csv, cur_path + '/csv_files/user_project.csv')
+    list_user = await asyncio.to_thread(pandas.read_csv, cur_path + '/csv_files/user_project.csv')
 
     for i, value in users.iterrows():
         if users.loc[i, 'email'] == settings.user:
@@ -218,7 +236,7 @@ async def delete_from_project(account: NewResearcher):
     for j, user in list_user.iterrows():
         if user['email'] == account.email and user['title'] == account.title:
             list_user = list_user.drop(index=j)
-            await asyncio.to_thread(list_users.to_csv, cur_path + '/csv_files/user_project.csv')
+            await asyncio.to_thread(list_user.to_csv, cur_path + '/csv_files/user_project.csv')
             return {"message": f"Deleted {account.email} from project {account.title}"}
         
     return {"message": f"User {account.email} is not a part of project {account.title}"}
@@ -269,4 +287,6 @@ def get_transactions(researcher: NewResearcher):
     return {"message": f"All transactions for account {researcher}"}
 
 if __name__ == '__main__':
-    uvicorn.run('research:app', host="localhost", port=8000, reload=True)
+    ports = [8000, 8001, 8002]  # list of port numbers
+    for port in ports:
+        uvicorn.run('research:app', host='localhost', port=port, reload=True)

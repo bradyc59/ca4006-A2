@@ -1,5 +1,3 @@
-,Unnamed: 0.11,Unnamed: 0.10,Unnamed: 0.9,Unnamed: 0.8,Unnamed: 0.7,Unnamed: 0.6,Unnamed: 0.5,Unnamed: 0.4,Unnamed: 0.3,Unnamed: 0.2,Unnamed: 0.1,Unnamed: 0,email,title, lead,lead
-0,0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,test@gmail.com,Title 1, True,
-1,1,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,conor@gmail.com,Test Title,True,
-2,2,2.0,2.0,,,,,,,,,,c@gmail.com,Hello 232,,True
-3,3,3.0,,,,,,,,,,,,Hello 2326,,True
+,Unnamed: 0.4,Unnamed: 0.3,Unnamed: 0.2,Unnamed: 0.1,Unnamed: 0,email,title,lead
+0,0,0.0,0.0,0.0,,,,True
+1,1,1.0,1.0,,,c@gmail.com,string,True

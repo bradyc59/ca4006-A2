@@ -239,7 +239,7 @@ def login_check(user_data: Login):
     print(emails)
     while i < len(emails):
         print(emails[i], passwords[i])
-        if user_data.email == emails[i] and user_data.password == passwords[i]:
+        if user_data.email == emails[i] and str(user_data.password) == str(passwords[i]):
             logged_in_user = {
                 'email': emails[i],
                 'password': passwords[i],

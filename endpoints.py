@@ -15,7 +15,6 @@ class ResearchProposal(BaseModel):
     acronym: str
     title: str
     description: str
-    funding_agency: str
     funding_amount: int
     approved: bool
     remaining_budget: int
