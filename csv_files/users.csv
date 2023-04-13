@@ -1,3 +1,4 @@
-,Unnamed: 0,email,password,usertype,organization
-0,0.0,test@gmail.com,123,Researcher,None
-1,,conor@gmail.com,Test,Researcher,None
+,Unnamed: 0.1,Unnamed: 0,email,password,usertype,organization
+0,0.0,0.0,test@gmail.com,123,Researcher,None
+1,1.0,,conor@gmail.com,Test,Researcher,None
+2,,,c@gmail.com,test,researcher,None

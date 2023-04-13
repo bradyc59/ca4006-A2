@@ -6,9 +6,13 @@ import fastapi
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import pandas
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
+from fastapi.middleware.cors import CORSMiddleware
 import os
 from uuid import UUID, uuid4
+
+import uvicorn
+import endpoints
 
 cur_path = os.path.dirname(__file__)
 
@@ -18,6 +22,7 @@ class Settings(BaseSettings):
 
 settings = Settings()    
 app = FastAPI()
+app.include_router(endpoints.read_router)
 templates = Jinja2Templates(directory="templates/")
 logger = logging.getLogger(__name__)
 
@@ -35,7 +40,15 @@ for i, p in props.iterrows():
 
 researcher_form = False
 today = date.today()
-  
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 class ResearchProposal(BaseModel):
     acronym: str
     title: str
@@ -66,8 +79,7 @@ class ResearchAccount(BaseModel):
 class Transaction(BaseModel):
     date: date
     amount: int
-    account_id: int
-
+    
 class Login(BaseModel):
     email: str
     password: str
@@ -77,12 +89,11 @@ async def root():
     print(settings)
     return {"message": "user already assigned to another project"}
 
-# Research proposal endpoint
-@app.post("/submit_proposal")
 def submit_proposal(data: ResearchProposal):
     user_pro = {
         'email': "",
-        'title': ""
+        'title': "",
+        'lead': True
     }
     diction = {
             'acronym': data.acronym,
@@ -105,7 +116,7 @@ def submit_proposal(data: ResearchProposal):
         
         props = props.append(diction, ignore_index = True)
         props.to_csv(cur_path + '/csv_files/Irish_research_council.csv')
-    if data.funding_agency == 'Science Foundation Ireland':
+    elif data.funding_agency == 'Science Foundation Ireland':
         props = pandas.read_csv(cur_path + '/csv_files/science_foundation_ireland.csv')
         current_agency = data.funding_agency
         if int(data.funding_amount) >= 200000 and int(data.funding_amount) <= 500000:
@@ -115,7 +126,7 @@ def submit_proposal(data: ResearchProposal):
 
         props = props.append(diction, ignore_index = True)
         props.to_csv(cur_path + '/csv_files/science_foundation_ireland.csv')
-    if data.funding_agency == 'European Council':
+    elif data.funding_agency == 'European Council':
         props = pandas.read_csv(cur_path + '/csv_files/european_council.csv')
         current_agency = data.funding_agency
         if int(data.funding_amount) >= 200000 and int(data.funding_amount) <= 500000:
@@ -125,6 +136,8 @@ def submit_proposal(data: ResearchProposal):
 
         props = props.append(diction, ignore_index = True)
         props.to_csv(cur_path + '/csv_files/european_council.csv')
+    else:
+        return {"message": "Please provide a funding"}
     if diction['approved'] == True:
         proposals = pandas.read_csv(cur_path + '/csv_files/proposals.csv')
         all_props = pandas.read_csv(cur_path + '/csv_files/list_all_proposals.csv')
@@ -171,7 +184,6 @@ async def view_proposals():
         print(logged_in_user)
         if logged_in_user['usertype'] == 'University':
             proposals.append(value.to_dict())
-            return {"proposals": proposals}
 
     for i, value in all_props.iterrows():
         for j, user in list_user.iterrows():
@@ -187,7 +199,7 @@ async def view_proposals():
 
 
     print(proposals)
-    return {"message": "user already assigned to another project"}
+    return {"message": f"No proposals assigned to user {settings.user}"}
 
 @app.get('/signup')
 def signup(request: Request):
@@ -212,7 +224,7 @@ def signup_confirm(user_details: SignUp):
 
 @app.get('/')
 async def login():
-    return {"message": settings.user}
+    return {"message": f"{settings.user}"}
 
 @app.post('/login-check')
 def login_check(user_data: Login):
@@ -260,10 +272,10 @@ def create_account(researcher: NewResearcher):
                     user['email'] = researcher.email
                     user = pandas.DataFrame([user])
                     list_users = list_users.append(user, ignore_index=True)
-                    print(list_users)
                     list_users.to_csv(cur_path + '/csv_files/user_project.csv')
-    props.to_csv(cur_path + '/csv_files/proposals.csv')
-    return {"message": "Account created successfully"}
+                    props.to_csv(cur_path + '/csv_files/proposals.csv')
+                    return {"message": f"Successfully added {researcher.email} to project {researcher.title}"}
+    return {"message": f"Could not add {researcher.email} to project {researcher.title}"}
 
 @app.post("/delete-from-project")
 def delete_from_project(account: NewResearcher):
@@ -276,21 +288,46 @@ def delete_from_project(account: NewResearcher):
 
     for j, user in list_user.iterrows():
         if list_user.loc[j, 'email'] == account.email and list_user.loc[j, 'title'] == account.title:
-            print("Hello")
             list_user = list_user.drop(index=i)
             list_user.to_csv(cur_path + '/csv_files/user_project.csv')
-            return {"message": f"Deleted  from project "}
+            return {"message": f"Deleted {account.email} from project {account.title}"}
         
-    return {"message": f"User  not a part of "}
+    return {"message": f"User {account.email} is not a part of project {account.title}"}
 
 # Transaction management endpoints
 @app.post("/create_transaction")
 def create_transaction(transaction: Transaction):
-    # TODO: Create a new transaction
-    return {"message": "Transaction created successfully"}
+    list_user = pandas.read_csv(cur_path + '/csv_files/user_project.csv')
+    props = pandas.read_csv(cur_path + '/csv_files/proposals.csv')
 
-@app.get("/transactions/{account_id}")
-def get_transactions(account_id: str):
+    transaction_dict = {
+        'date': transaction.date,
+        'amount': transaction.amount
+    }
+    for i, value in list_user.iterrows():
+        if settings.user == list_user.loc[i, 'email']:
+            for j, prop in props.iterrows():
+                if list_user.loc[i, 'title'] == props.loc[j, 'title']:
+                    current_proposal = props.loc[j]
+                    props = props.drop(index=j)
+    date_object = datetime.strptime(current_proposal['end_date'], '%Y-%m-%d').date()
+    if date_object > transaction_dict['date']:
+        if int(current_proposal['remaining_budget']) >= int(transaction_dict['amount']):
+            current_proposal['remaining_budget'] = int(current_proposal['remaining_budget']) - int(transaction_dict['amount'])
+            props = props.append(current_proposal, ignore_index=True)
+            props.to_csv(cur_path + '/csv_files/proposals.csv')
+            with open(cur_path + '/transaction_files/transactions.txt', 'a') as f:
+                    f.write(f"{settings.user} withdrew {transaction_dict['amount']} on {transaction_dict['date']} from {current_proposal['title']}, leaving the project with a total of {current_proposal['remaining_budget']} left. \n")
+            return {"message": f"{settings.user} successfully completed a transaction withdrawing {transaction_dict['amount']} from {current_proposal['title']}"}
+        else:
+            return {"message": f"Insufficent budget left in project {current_proposal['title']}, remaining budget is {current_proposal['remaining_budget']}"}
+    else:
+        return {"message": f"Project {current_proposal['title']} is past the end date, the project ceased on {current_proposal['end_date']}"}
+
+@app.get("/transaction")
+def get_transactions(researcher: NewResearcher):
     # TODO: Get all transactions for a research account
-    return {"message": f"All transactions for account {account_id}"}
+    return {"message": f"All transactions for account {researcher}"}
 
+if __name__ == '__main__':
+    uvicorn.run('main:app', host="localhost", port=8005, reload=True)
