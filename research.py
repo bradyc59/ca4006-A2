@@ -31,14 +31,6 @@ logged_in_user = { 'email': settings.user }
 researcher_form = False
 today = date.today()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 class ResearchProposal(BaseModel):
     acronym: str
     title: str
@@ -58,13 +50,6 @@ class SignUp(BaseModel):
     usertype: str
     organization: str = "None"
 
-class ResearchAccount(BaseModel):
-    id: int
-    researchers: List[str] = []
-    approved_proposal: str
-    remaining_budget: int
-    end_date: date
-
 class Transaction(BaseModel):
     date: date
     amount: int
@@ -75,17 +60,6 @@ class Login(BaseModel):
 
 @app.post("/submit-proposal")
 async def submit_proposal(data: ResearchProposal):
-    # data = {
-    #     'acronym': data.acronym,
-    #     'title': data.title,
-    #     'description': data.description,
-    #     'funding_amount': data.funding_amount,
-    #     'approved': data.approved,
-    #     'end_date': data.end_date,
-    #     'remaining_budget': data.remaining_budget
-    # }
-    print(data)
-    # loop = asyncio.get_event_loop()
     result = await agency.approve_proposal(data, settings.user)
     return result
 
@@ -95,7 +69,6 @@ async def view_proposals():
     props = props.loc[:, ~props.columns.str.contains('^Unnamed')]
     list_users = pandas.read_csv(cur_path + '/csv_files/user_project.csv')
     list_users = list_users.loc[:, ~list_users.columns.str.contains('^Unnamed')]
-    user = settings.user
     proposals = props.to_dict('records')
     if len(proposals) != 0:
         # Merge the two dataframes based on the common column "title"
@@ -139,13 +112,6 @@ def load_data():
         proposal_dict['researchers'] = list_researcher
         proposals.append(proposal_dict)
     return proposals
-
-
-@app.get('/signup')
-def signup(request: Request):
-    return {"message": "user already assigned to another project"}
-
-import concurrent.futures
 
 @app.post('/signup-confirm')
 def signup_confirm(user_details: SignUp):
@@ -202,7 +168,6 @@ async def check_user(email, password, usertype, organization, input_email, input
 @app.post("/add-reseacrher")
 async def create_account(researcher: NewResearcher):
     # TODO: Create a new research account
-    print(researcher)
     list_researchers = []
     users = await asyncio.to_thread(pandas.read_csv, cur_path + '/csv_files/users.csv')
     list_users = await asyncio.to_thread(pandas.read_csv, cur_path + '/csv_files/user_project.csv')
@@ -219,7 +184,6 @@ async def create_account(researcher: NewResearcher):
                             user = pandas.DataFrame([user])
                             list_users = list_users.append(user, ignore_index=True)
                             await asyncio.to_thread(list_users.to_csv, cur_path + '/csv_files/user_project.csv')
-                            await asyncio.to_thread(props.to_csv, cur_path + '/csv_files/proposals.csv')
                             return {"message": f"Successfully added {researcher.email} to project {researcher.title}"}
     return {"message": f"Could not add {researcher.email} to project {researcher.title}"}
 
@@ -245,46 +209,9 @@ async def delete_from_project(account: NewResearcher):
 
 @app.post("/create_transaction")
 async def create_transaction(transaction: Transaction):
-    async with aiofiles.open(cur_path + '/csv_files/user_project.csv', mode='r') as f:
-        list_user = await f.read()
-    list_user = pandas.read_csv(io.StringIO(list_user))
-
-    async with aiofiles.open(cur_path + '/csv_files/proposals.csv', mode='r') as f:
-        props = await f.read()
-    props = pandas.read_csv(io.StringIO(props))
-
-    transaction_dict = {
-        'date': transaction.date,
-        'amount': transaction.amount
-    }
-
-    for i, value in list_user.iterrows():
-        if settings.user == list_user.loc[i, 'email']:
-            for j, prop in props.iterrows():
-                if list_user.loc[i, 'title'] == props.loc[j, 'title']:
-                    current_proposal = props.loc[j]
-                    props = props.drop(index=j)
-
-    date_object = datetime.strptime(current_proposal['end_date'], '%Y-%m-%d').date()
-    if date_object > transaction_dict['date']:
-        if int(current_proposal['remaining_budget']) >= int(transaction_dict['amount']):
-            current_proposal['remaining_budget'] = int(current_proposal['remaining_budget']) - int(transaction_dict['amount'])
-            props = props.append(current_proposal, ignore_index=True)
-            props.to_csv(cur_path + '/csv_files/proposals.csv', index=False)
-            async with aiofiles.open(cur_path + '/transaction_files/transactions.txt', mode='a') as f:
-                await f.write(f"{settings.user} withdrew {transaction_dict['amount']} on {transaction_dict['date']} from {current_proposal['title']}, leaving the project with a total of {current_proposal['remaining_budget']} left. \n")
-            return {"message": f"{settings.user} successfully completed a transaction withdrawing {transaction_dict['amount']} from {current_proposal['title']}"}
-        else:
-            return {"message": f"Insufficient budget left in project {current_proposal['title']}, remaining budget is {current_proposal['remaining_budget']}"}
-    else:
-        return {"message": f"Project {current_proposal['title']} is past the end date, the project ceased on {current_proposal['end_date']}"}
-
-
-
-@app.get("/transaction")
-def get_transactions(researcher: NewResearcher):
-    # TODO: Get all transactions for a research account
-    return {"message": f"All transactions for account {researcher}"}
+    result = await agency.transaction(transaction, settings.user)
+    return result
+    
 
 if __name__ == '__main__':
     ports = [8000, 8001, 8002]  # list of port numbers

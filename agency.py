@@ -68,34 +68,9 @@ class ResearchProposal(BaseModel):
     remaining_budget: int
     end_date: str = today + timedelta(days=3*30)
 
-
-class NewResearcher(BaseModel):
-    title: str
-    email: str
-
-
-class SignUp(BaseModel):
-    name: str
-    password: str
-    budget: int
-
-
-class ResearchAccount(BaseModel):
-    id: int
-    researchers: List[str] = []
-    approved_proposal: str
-    remaining_budget: int
-    end_date: date
-
-
 class Transaction(BaseModel):
     date: date
     amount: int
-
-
-class Login(BaseModel):
-    name: str
-    password: str
 
 @app.post('/approve_proposal')
 async def approve_proposal(data: ResearchProposal, user: str):
@@ -145,6 +120,10 @@ async def view_proposals():
         return {"proposals": proposals}
 
     return {"message": f"No proposals have been submitted to your agency"}
+
+async def transaction(transaction: Transaction, user: str):
+    result = await dcu.write_transaction(transaction, user)
+    return result
 
 if __name__ == '__main__':
     uvicorn.run('agency:app', host="localhost", port=8003, reload=True)
